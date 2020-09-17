@@ -840,7 +840,7 @@ for _, strategy in helpers.each_strategy() do
                 })
 
                 -- wait for old healthchecks to stop
-                ngx.sleep(0.5)
+                ngx.sleep(1)
 
                 -- start server
                 local server1 = bu.http_server(localhost, port, { 1 })

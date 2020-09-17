@@ -679,6 +679,7 @@ describe("Admin API #" .. strategy, function()
         end)
 
         it("checks every combination of valid and invalid upstream and target", function()
+          ngx.sleep(1)
           for i, u in ipairs({ utils.uuid(), "invalid", upstream.name, upstream.id }) do
             for j, t in ipairs({ utils.uuid(), "invalid:1234", wrong_target.id, target.target, target.id }) do
               for _, e in ipairs({ "healthy", "unhealthy" }) do
@@ -701,6 +702,7 @@ describe("Admin API #" .. strategy, function()
             path = target_path .. "/unhealthy"
           })
           assert.same(204, status, body)
+          ngx.sleep(1)
           status, body = assert(client_send {
             method = "GET",
             path = "/upstreams/" .. upstream.id .. "/health"
@@ -714,6 +716,7 @@ describe("Admin API #" .. strategy, function()
             path = target_path .. "/healthy"
           })
           assert.same(204, status)
+          ngx.sleep(1)
           status, body = assert(client_send {
             method = "GET",
             path = "/upstreams/" .. upstream.id .. "/health"
@@ -725,12 +728,14 @@ describe("Admin API #" .. strategy, function()
         end)
 
         it("flips the target status from HEALTHY to UNHEALTHY", function()
+          ngx.sleep(1)
           local status, body, json
           status = assert(client_send {
             method = "POST",
             path = target_path .. "/healthy"
           })
           assert.same(204, status)
+          ngx.sleep(1)
           status, body = assert(client_send {
             method = "GET",
             path = "/upstreams/" .. upstream.id .. "/health"
@@ -744,6 +749,7 @@ describe("Admin API #" .. strategy, function()
             path = target_path .. "/unhealthy"
           })
           assert.same(204, status)
+          ngx.sleep(1)
           status, body = assert(client_send {
             method = "GET",
             path = "/upstreams/" .. upstream.id .. "/health"

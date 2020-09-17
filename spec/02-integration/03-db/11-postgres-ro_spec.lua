@@ -53,6 +53,8 @@ for _, strategy in helpers.each_strategy() do
         body = assert.res_status(201, res)
         json = cjson.decode(body)
 
+        ngx.sleep(1)
+
         route_id = json.id
 
         res = assert(proxy_client:send({
@@ -69,6 +71,8 @@ for _, strategy in helpers.each_strategy() do
           path   = "/routes/" .. route_id,
         }))
         assert.res_status(204, res)
+
+        ngx.sleep(1)
 
         res = assert(proxy_client:send({
           method  = "GET",
@@ -123,6 +127,8 @@ for _, strategy in helpers.each_strategy() do
           headers = {["Content-Type"] = "application/json"}
         }))
         assert.res_status(201, res)
+
+        ngx.sleep(1)
 
         res = assert(proxy_client:send({
           method  = "GET",
