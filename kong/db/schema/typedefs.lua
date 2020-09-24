@@ -4,18 +4,20 @@ local utils = require "kong.tools.utils"
 local openssl_pkey = require "resty.openssl.pkey"
 local openssl_x509 = require "resty.openssl.x509"
 local iputils = require "resty.iputils"
-local Schema = require("kong.db.schema")
-local socket_url = require("socket.url")
+local Schema = require "kong.db.schema"
+local socket_url = require "socket.url"
 local constants = require "kong.constants"
-local px = require "resty.mediador.proxy"
+local ipmatcher = require "resty.ipmatcher"
 
 
+local tostring = tostring
 local pairs = pairs
-local pcall = pcall
 local match = string.match
 local gsub = string.gsub
+local find = string.find
 local null = ngx.null
 local type = type
+local sub = string.sub
 
 
 local function validate_host(host)
@@ -52,14 +54,44 @@ local function validate_ip(ip)
 end
 
 
-local function validate_ip_or_cidr(ip)
-  local pok, perr = pcall(px.compile, ip)
-
-  if pok and type(perr) == "function" then
-    return true
+local validate_ip_or_cidr
+do
+  local ip4_cidrs = {}
+  for i = 0, 32 do
+    ip4_cidrs[tostring(i)] = true
   end
 
-  return nil, "invalid ip or cidr range: '" .. ip .. "'"
+  local ip6_cidrs = {}
+  for i = 0, 128 do
+    ip6_cidrs[tostring(i)] = true
+  end
+
+  validate_ip_or_cidr = function(ip_or_cidr)
+    if type(ip_or_cidr) ~= "string" then
+      return nil, "invalid ip or cidr range: '" .. ip_or_cidr .. "'"
+    end
+
+    if ipmatcher.parse_ipv4(ip_or_cidr)
+    or ipmatcher.parse_ipv6(ip_or_cidr)
+    then
+      return true
+    end
+
+    local p = find(ip_or_cidr, "/", 1, true)
+    if not p then
+      return nil, "invalid ip or cidr range: '" .. ip_or_cidr .. "'"
+    end
+
+    local ip = sub(ip_or_cidr, 1, p - 1)
+    local block = sub(ip_or_cidr, p + 1)
+    if (ipmatcher.parse_ipv4(ip) and ip4_cidrs[block])
+    or (ipmatcher.parse_ipv6(ip) and ip6_cidrs[block])
+    then
+      return true
+    end
+
+    return nil, "invalid ip or cidr range: '" .. ip_or_cidr .. "'"
+  end
 end
 
 

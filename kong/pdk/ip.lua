@@ -11,7 +11,52 @@
 -- See [docs.konghq.com/latest/configuration/#trusted_ips](https://docs.konghq.com/latest/configuration/#trusted_ips)
 --
 -- @module kong.ip
-local ip = require "resty.mediador.ip"
+local ipmatcher = require "resty.ipmatcher"
+
+
+local is_valid_ip_or_cidr
+do
+  local type = type
+  local string = string
+  local tostring = tostring
+
+  local ip4_cidrs = {}
+  for i = 0, 32 do
+    ip4_cidrs[tostring(i)] = true
+  end
+
+  local ip6_cidrs = {}
+  for i = 0, 128 do
+    ip6_cidrs[tostring(i)] = true
+  end
+
+  is_valid_ip_or_cidr = function(ip_or_cidr)
+    if type(ip_or_cidr) ~= "string" then
+      return false
+    end
+
+    if ipmatcher.parse_ipv4(ip_or_cidr)
+    or ipmatcher.parse_ipv6(ip_or_cidr)
+    then
+      return true
+    end
+
+    local p = string.find(ip_or_cidr, "/", 1, true)
+    if not p then
+      return false
+    end
+
+    local ip = string.sub(ip_or_cidr, 1, p - 1)
+    local block = string.sub(ip_or_cidr, p + 1)
+    if (ipmatcher.parse_ipv4(ip) and ip4_cidrs[block])
+    or (ipmatcher.parse_ipv6(ip) and ip6_cidrs[block])
+    then
+      return true
+    end
+
+    return false
+  end
+end
 
 ---
 -- Depending on the `trusted_ips` configuration property,
@@ -45,7 +90,7 @@ local function new(self)
   for i = 1, n_ips do
     local address = ips[i]
 
-    if ip.valid(address) then
+    if is_valid_ip_or_cidr(address) then
       trusted_ips[idx] = address
       idx = idx + 1
 
@@ -66,9 +111,10 @@ local function new(self)
 
   else
     -- do not load if not needed
-    local px = require "resty.mediador.proxy"
-
-    _IP.is_trusted = px.compile(trusted_ips)
+    local matcher = ipmatcher.new(trusted_ips)
+    _IP.is_trusted = function(ip)
+      return matcher:match(ip) and true or false
+    end
   end
 
   return _IP
