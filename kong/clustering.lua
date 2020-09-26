@@ -28,6 +28,7 @@ local table_insert = table.insert
 local table_remove = table.remove
 local inflate_gzip = utils.inflate_gzip
 local deflate_gzip = utils.deflate_gzip
+local fmt = string.format
 
 
 local MAX_PAYLOAD = 4 * 1024 * 1024 -- 4MB
@@ -454,25 +455,42 @@ function _M.init_worker(conf)
     assert(shdict, "kong_clustering shdict missing")
 
     -- ROLE = "control_plane"
+    local db = kong.db
 
     kong.worker_events.register(function(data)
       -- we have to re-broadcast event using `post` because the dao
       -- events were sent using `post_local` which means not all workers
       -- can receive it
+
+      -- send event to other workers in the same node
       local res, err = kong.worker_events.post("clustering", "push_config")
       if not res then
         ngx_log(ngx_ERR, "unable to broadcast event: " .. err)
       end
+
+      -- send event to other nodes in the cluster
+      local cache_key = db[data.schema.name]:cache_key(data.entity)
+      local key = fmt("%s:%s", data.operation, cache_key)
+      res, err = kong.cluster_events:broadcast("clustering:push_config", key)
+      if not res then
+        ngx_log(ngx_ERR, "unable to broadcast cluster event: ", err)
+      end
     end, "dao:crud")
 
-    kong.worker_events.register(function(data)
+    local push_config_cb = function(_)
       local res, err = declarative.export_config()
       if not res then
         ngx_log(ngx_ERR, "unable to export config from database: " .. err)
       end
 
       push_config(res)
-    end, "clustering", "push_config")
+    end
+
+    -- receive updates from other workers in the same node
+    kong.worker_events.register(push_config_cb, "clustering", "push_config")
+
+    -- receive updates from the cluster
+    kong.cluster_events:subscribe("clustering:push_config", push_config_cb)
   end
 end
 
